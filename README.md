@@ -8,7 +8,7 @@
 
 Image caching and SwiftData persistence implementations built with Swift 6 strict concurrency and full test coverage.
 
-> **Architecture:** SKCore defines the protocols (`ImageCacheProtocol`, `PersistentRepositoryProtocol`). SKStorage provides the implementations. Feature modules depend only on SKCore; the app layer injects SKStorage at composition time. This enables parallel compilation across feature and infrastructure modules.
+> **Architecture:** [SKCore](https://github.com/KhachatryanSargis/SKCore) defines the protocols (`ImageCacheProtocol`, `PersistentRepositoryProtocol`). SKStorage provides the implementations. Feature modules depend only on SKCore; the app layer injects SKStorage at composition time. This enables parallel compilation across feature and infrastructure modules.
 
 ---
 
@@ -85,7 +85,7 @@ let cache = ImageCacheCoordinator(memoryCache: memory, diskCache: disk)
 |------|---------|----------------|
 | `InMemoryImageCache` | `NSCache` | Fast, volatile, configurable limits, auto-eviction |
 | `DiskImageCache` | File system (SHA-256 filenames) | Persistent, JPEG (iOS) / TIFF (macOS) |
-| `ImageCacheCoordinator` | Both | Memory → disk fallback with auto-promotion |
+| `ImageCacheCoordinator` | Both | Memory-first with disk fallback and auto-promotion |
 
 ---
 
@@ -145,7 +145,7 @@ let loader = AvatarLoader(cache: cache)
 
 ## Testing
 
-All implementations conform to SKCore protocols, making them fully mockable.
+All implementations conform to SKCore protocols, making them fully mockable. Tests use Swift Testing (`@Suite`, `@Test`, `#expect`) exclusively — no XCTest.
 
 ```swift
 // Image cache — direct testing with actors
@@ -162,8 +162,6 @@ await disk.store(testImage, for: testURL)
 let container = try ModelContainer(for: Item.self, configurations: .init(isStoredInMemoryOnly: true))
 let repo = SwiftDataRepository<Item>(modelContext: container.mainContext)
 ```
-
-Tests use Swift Testing (`@Suite`, `@Test`, `#expect`) exclusively — no XCTest.
 
 ---
 

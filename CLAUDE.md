@@ -6,8 +6,8 @@ This file is owned by SKStorage and committed alongside the code.
 ## Package Overview
 
 SKStorage provides image caching and SwiftData persistence implementations
-for iOS 17+ / macOS 14+. Swift 6.1 with strict concurrency. Depends on SKCore
-for all protocol definitions.
+for iOS 17+ / macOS 14+. Swift 6.1 with strict concurrency. Depends on
+SKCore for all protocol definitions. SKStorage has no other external dependencies.
 
 ## Relationship to SKCore
 
@@ -28,7 +28,7 @@ modules depend only on SKCore (protocols). The app layer injects SKStorage
 | Module | Key Types | Notes |
 |---|---|---|
 | **ImageCache** | `ImageCacheCoordinator`, `InMemoryImageCache`, `DiskImageCache` | Two-tier (memory + disk) with auto-promotion; actor-isolated |
-| **SwiftData** | `SwiftDataRepository<T>` | Generic CRUD for any `PersistentModel` |
+| **SwiftData** | `SwiftDataRepository<T>` | Generic CRUD for any `PersistentModel`; `@MainActor` |
 
 ## Conventions Specific to This Package
 
@@ -40,9 +40,9 @@ await cache.store(image, for: imageURL)
 let cached = await cache.image(for: imageURL)
 ```
 
-- `InMemoryImageCache` — `NSCache`-backed, configurable limits, auto-eviction
-- `DiskImageCache` — file-based with SHA-256 filenames, JPEG (iOS) / TIFF (macOS)
-- Use `PlatformImage` (from SKCore) for cross-platform support
+- `InMemoryImageCache` — `NSCache`-backed actor, configurable limits, auto-eviction
+- `DiskImageCache` — file-based actor with SHA-256 filenames, JPEG (iOS) / TIFF (macOS)
+- Use `PlatformImage` (from SKCore) for cross-platform support — never reference `UIImage`/`NSImage` directly
 
 ### SwiftDataRepository
 Generic repository wrapping `ModelContext` for type-safe CRUD:
@@ -58,7 +58,7 @@ let items = try await repo.fetch(predicate: #Predicate<Item> { $0.name == "New I
 - All public APIs are `async` — callers must `await`
 
 ### Testing in SKStorage
-All dependencies are injectable via protocols. Tests use Swift Testing exclusively:
+All dependencies are injectable via protocols. Tests use Swift Testing (`@Suite`, `@Test`, `#expect`) exclusively — no XCTest:
 ```swift
 let memory = InMemoryImageCache(countLimit: 10)
 await memory.store(anyImage(), for: anyURL())
@@ -74,9 +74,11 @@ swift test
 ```
 
 ## Design Rules
+
 - All protocols belong in SKCore — SKStorage provides implementations only
 - Key-value storage belongs in SKCore — do NOT add UserDefaults or Keychain abstractions here
 - Every public type must conform to its corresponding SKCore protocol
 - Cache coordinators are actors — use actor isolation for thread safety
 - Image cache uses `PlatformImage` (from SKCore) — never reference `UIImage`/`NSImage` directly
 - All public API must be documented with `///` comments
+- Prefer value types where possible; use actors only for mutable shared state
