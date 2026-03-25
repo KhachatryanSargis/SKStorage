@@ -6,7 +6,9 @@
 [![SPM](https://img.shields.io/badge/SPM-compatible-brightgreen?logo=swift)](https://swift.org/package-manager/)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
-Type-safe storage, image caching, and SwiftData persistence built with Swift 6 strict concurrency and full test coverage.
+Image caching and SwiftData persistence built with Swift 6 strict concurrency and full test coverage.
+
+> **Note:** Key-value storage (UserDefaults, Keychain, typed keys) lives in [SKCore](https://github.com/KhachatryanSargis/SKCore). SKStorage focuses on image caching and persistent models.
 
 ---
 
@@ -39,54 +41,8 @@ targets: [
 
 | Module | Description | Key Types |
 |--------|-------------|-----------|
-| **InfoCache** | Codable key-value storage backed by UserDefaults or Keychain | `StorageCoordinator`, `KeychainStorage`, `UserDefaultsDataStorage` |
 | **ImageCache** | Two-tier image caching (memory + disk) | `ImageCacheCoordinator`, `InMemoryImageCache`, `DiskImageCache` |
 | **SwiftData** | Generic CRUD repository for `PersistentModel` types | `SwiftDataRepository` |
-
----
-
-## InfoCache
-
-Unified access to UserDefaults and Keychain through a single actor-based coordinator. Non-sensitive data goes to UserDefaults; pass `secure: true` to route to the Keychain.
-
-### StorageCoordinator
-
-```swift
-let storage = StorageCoordinator()
-
-// Non-sensitive (UserDefaults)
-try await storage.save("dark", forKey: "theme")
-let theme: String? = try await storage.load(forKey: "theme")
-
-// Secure (Keychain)
-try await storage.save(token, forKey: "auth_token", secure: true)
-let token: String? = try await storage.load(forKey: "auth_token", secure: true)
-
-// Delete
-try await storage.delete(forKey: "theme")
-```
-
-### Direct Backend Access
-
-For cases where you need the raw `Data`-level API without Codable encoding:
-
-```swift
-// UserDefaults
-let defaults = UserDefaultsDataStorage()
-try defaults.save(Data("hello".utf8), forKey: "greeting")
-
-// Keychain
-let keychain = KeychainStorage(service: "com.example.myapp")
-try keychain.save(secretData, forKey: "api_key")
-```
-
-### Backends
-
-| Type | Backed By | Use Case |
-|------|-----------|----------|
-| `UserDefaultsDataStorage` | `UserDefaults` | Preferences, flags, non-sensitive settings |
-| `KeychainStorage` | Security framework | Tokens, credentials, sensitive data |
-| `StorageCoordinator` | Both (via `secure:` flag) | Unified Codable storage |
 
 ---
 
@@ -163,21 +119,22 @@ try await repo.delete(item)
 
 ## Testing
 
-All dependencies are injectable via protocols, making every type fully testable without hitting real storage backends.
+All dependencies are injectable via protocols, making every type fully testable.
 
 ```swift
-// Mock keychain operations
-let mock = MockKeychainOperations()
-let keychain = KeychainStorage(service: "test", keychain: mock)
+// Image cache — direct testing with actors
+let memory = InMemoryImageCache(countLimit: 10)
+await memory.store(testImage, for: testURL)
+#expect(await memory.image(for: testURL) != nil)
 
-// Mock data storage for StorageCoordinator
-let mockDefaults = MockDataStorage()
-let mockKeychain = MockDataStorage()
-let coordinator = StorageCoordinator(userDefaults: mockDefaults, keychain: mockKeychain)
+// Disk cache — isolated test directory
+let disk = DiskImageCache(directory: tempDir)
+await disk.store(testImage, for: testURL)
+#expect(await disk.image(for: testURL) != nil)
 
-// Verify interactions
-try await coordinator.save("value", forKey: "key")
-#expect(mockDefaults.saveCallCount == 1)
+// SwiftData — in-memory container
+let container = try ModelContainer(for: Item.self, configurations: .init(isStoredInMemoryOnly: true))
+let repo = SwiftDataRepository<Item>(modelContext: container.mainContext)
 ```
 
 Tests use Swift Testing (`@Suite`, `@Test`, `#expect`) exclusively — no XCTest.
@@ -191,13 +148,8 @@ SKStorage/
 ├── Package.swift
 ├── Sources/SKStorage/
 │   ├── Protocols/
-│   │   ├── StorageProtocol.swift          # DataStorageProtocol
 │   │   ├── ImageCacheProtocol.swift       # ImageCacheProtocol + PlatformImage
 │   │   └── PersistentRepositoryProtocol.swift
-│   ├── InfoCache/
-│   │   ├── KeychainStorage.swift          # Keychain + KeychainOperations + KeychainError
-│   │   ├── UserDefaultsDataStorage.swift  # Raw Data UserDefaults wrapper
-│   │   └── StorageCoordinator.swift       # Actor-based Codable coordinator
 │   ├── ImageCache/
 │   │   ├── InMemoryImageCache.swift       # NSCache-backed actor
 │   │   ├── DiskImageCache.swift           # File-based actor with SHA-256
@@ -206,15 +158,7 @@ SKStorage/
 │       └── SwiftDataRepository.swift      # Generic PersistentModel CRUD
 └── Tests/SKStorageTests/
     ├── Helpers/
-    │   ├── MockKeychainOperations.swift
-    │   ├── MockDataStorage.swift
-    │   ├── TestError.swift
     │   └── TestHelpers.swift
-    ├── InfoCache/
-    │   ├── KeychainStorageTests.swift
-    │   ├── KeychainErrorTests.swift
-    │   ├── UserDefaultsDataStorageTests.swift
-    │   └── StorageCoordinatorTests.swift
     ├── ImageCache/
     │   ├── InMemoryImageCacheTests.swift
     │   ├── DiskImageCacheTests.swift
@@ -222,12 +166,6 @@ SKStorage/
     └── SwiftData/
         └── SwiftDataRepositoryTests.swift
 ```
-
----
-
-## Dependencies
-
-- [SKCore](https://github.com/KhachatryanSargis/SKCore) — `LoggerProtocol` for optional diagnostics in `StorageCoordinator`
 
 ---
 

@@ -38,10 +38,3 @@ func testDirectory() -> URL {
         .appendingPathComponent("SKStorageTests-\(UUID().uuidString)")
 }
 
-// MARK: - Test Codable
-
-/// A simple Codable struct for testing storage encoding/decoding.
-struct TestCodable: Codable, Equatable, Sendable {
-    let id: String
-    let value: Int
-}
