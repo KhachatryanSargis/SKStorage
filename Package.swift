@@ -14,9 +14,13 @@ let package = Package(
             targets: ["SKStorage"]
         )
     ],
+    dependencies: [
+        .package(url: "https://github.com/KhachatryanSargis/SKCore.git", branch: "main")
+    ],
     targets: [
         .target(
             name: "SKStorage",
+            dependencies: ["SKCore"],
             path: "Sources/SKStorage"
         ),
         .testTarget(

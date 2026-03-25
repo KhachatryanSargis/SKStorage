@@ -1,4 +1,5 @@
 import Foundation
+import SKCore
 
 #if canImport(UIKit)
 import UIKit

@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import SKCore
 
 #if canImport(UIKit)
 import UIKit

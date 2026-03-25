@@ -5,11 +5,23 @@ This file is owned by SKStorage and committed alongside the code.
 
 ## Package Overview
 
-SKStorage provides image caching and SwiftData persistence for iOS 17+ / macOS 14+.
-Swift 6.1 with strict concurrency. No external dependencies.
+SKStorage provides image caching and SwiftData persistence implementations
+for iOS 17+ / macOS 14+. Swift 6.1 with strict concurrency. Depends on SKCore
+for all protocol definitions.
 
-Key-value storage (UserDefaults, Keychain) lives in **SKCore**, not here.
-SKStorage focuses on two higher-level concerns: image caching and persistent models.
+## Relationship to SKCore
+
+SKCore defines the protocols; SKStorage provides the implementations. Feature
+modules depend only on SKCore (protocols). The app layer injects SKStorage
+(implementations) at composition time, enabling parallel compilation.
+
+| From SKCore (protocols) | From SKStorage (implementations) |
+|---|---|
+| `ImageCacheProtocol` | `InMemoryImageCache`, `DiskImageCache`, `ImageCacheCoordinator` |
+| `PersistentRepositoryProtocol` | `SwiftDataRepository<T>` |
+| `PlatformImage` typealias | — |
+
+**Do NOT define protocols here.** All protocols belong in SKCore.
 
 ## Modules & Key Types
 
@@ -17,7 +29,6 @@ SKStorage focuses on two higher-level concerns: image caching and persistent mod
 |---|---|---|
 | **ImageCache** | `ImageCacheCoordinator`, `InMemoryImageCache`, `DiskImageCache` | Two-tier (memory + disk) with auto-promotion; actor-isolated |
 | **SwiftData** | `SwiftDataRepository<T>` | Generic CRUD for any `PersistentModel` |
-| **Protocols** | `ImageCacheProtocol`, `PersistentRepositoryProtocol` | SKStorage's own protocols |
 
 ## Conventions Specific to This Package
 
@@ -31,7 +42,7 @@ let cached = await cache.image(for: imageURL)
 
 - `InMemoryImageCache` — `NSCache`-backed, configurable limits, auto-eviction
 - `DiskImageCache` — file-based with SHA-256 filenames, JPEG (iOS) / TIFF (macOS)
-- Use `PlatformImage` for cross-platform support (`UIImage` on iOS, `NSImage` on macOS)
+- Use `PlatformImage` (from SKCore) for cross-platform support
 
 ### SwiftDataRepository
 Generic repository wrapping `ModelContext` for type-safe CRUD:
@@ -49,7 +60,6 @@ let items = try await repo.fetch(predicate: #Predicate<Item> { $0.name == "New I
 ### Testing in SKStorage
 All dependencies are injectable via protocols. Tests use Swift Testing exclusively:
 ```swift
-// Direct cache testing — no mocks needed for actors
 let memory = InMemoryImageCache(countLimit: 10)
 await memory.store(anyImage(), for: anyURL())
 let cached = await memory.image(for: anyURL())
@@ -64,9 +74,9 @@ swift test
 ```
 
 ## Design Rules
+- All protocols belong in SKCore — SKStorage provides implementations only
 - Key-value storage belongs in SKCore — do NOT add UserDefaults or Keychain abstractions here
-- Every public type must have a corresponding protocol
-- All protocols must be `Sendable`
+- Every public type must conform to its corresponding SKCore protocol
 - Cache coordinators are actors — use actor isolation for thread safety
-- Image cache uses `PlatformImage` typealias — never reference `UIImage`/`NSImage` directly
+- Image cache uses `PlatformImage` (from SKCore) — never reference `UIImage`/`NSImage` directly
 - All public API must be documented with `///` comments

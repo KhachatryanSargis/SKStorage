@@ -6,9 +6,9 @@
 [![SPM](https://img.shields.io/badge/SPM-compatible-brightgreen?logo=swift)](https://swift.org/package-manager/)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
-Image caching and SwiftData persistence built with Swift 6 strict concurrency and full test coverage.
+Image caching and SwiftData persistence implementations built with Swift 6 strict concurrency and full test coverage.
 
-> **Note:** Key-value storage (UserDefaults, Keychain, typed keys) lives in [SKCore](https://github.com/KhachatryanSargis/SKCore). SKStorage focuses on image caching and persistent models.
+> **Architecture:** SKCore defines the protocols (`ImageCacheProtocol`, `PersistentRepositoryProtocol`). SKStorage provides the implementations. Feature modules depend only on SKCore; the app layer injects SKStorage at composition time. This enables parallel compilation across feature and infrastructure modules.
 
 ---
 
@@ -48,7 +48,7 @@ targets: [
 
 ## ImageCache
 
-Two-tier image caching with automatic memory-to-disk promotion. Uses actor isolation for thread safety and `PlatformImage` for cross-platform support (`UIImage` on iOS, `NSImage` on macOS).
+Two-tier image caching with automatic memory-to-disk promotion. Uses actor isolation for thread safety and `PlatformImage` (from SKCore) for cross-platform support.
 
 ### ImageCacheCoordinator
 
@@ -117,9 +117,35 @@ try await repo.delete(item)
 
 ---
 
+## Dependency Inversion
+
+Feature modules depend on SKCore (protocols), not SKStorage (implementations):
+
+```swift
+// FeatureModule/AvatarLoader.swift — depends on SKCore only
+import SKCore
+
+struct AvatarLoader {
+    let cache: any ImageCacheProtocol
+
+    func loadAvatar(url: URL) async -> PlatformImage? {
+        await cache.image(for: url)
+    }
+}
+
+// App/CompositionRoot.swift — wires implementations
+import SKCore
+import SKStorage
+
+let cache = ImageCacheCoordinator()
+let loader = AvatarLoader(cache: cache)
+```
+
+---
+
 ## Testing
 
-All dependencies are injectable via protocols, making every type fully testable.
+All implementations conform to SKCore protocols, making them fully mockable.
 
 ```swift
 // Image cache — direct testing with actors
@@ -147,9 +173,6 @@ Tests use Swift Testing (`@Suite`, `@Test`, `#expect`) exclusively — no XCTest
 SKStorage/
 ├── Package.swift
 ├── Sources/SKStorage/
-│   ├── Protocols/
-│   │   ├── ImageCacheProtocol.swift       # ImageCacheProtocol + PlatformImage
-│   │   └── PersistentRepositoryProtocol.swift
 │   ├── ImageCache/
 │   │   ├── InMemoryImageCache.swift       # NSCache-backed actor
 │   │   ├── DiskImageCache.swift           # File-based actor with SHA-256
@@ -166,6 +189,12 @@ SKStorage/
     └── SwiftData/
         └── SwiftDataRepositoryTests.swift
 ```
+
+---
+
+## Dependencies
+
+- [SKCore](https://github.com/KhachatryanSargis/SKCore) — protocol definitions (`ImageCacheProtocol`, `PlatformImage`, `PersistentRepositoryProtocol`)
 
 ---
 
