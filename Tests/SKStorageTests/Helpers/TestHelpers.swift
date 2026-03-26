@@ -1,4 +1,5 @@
 import Foundation
+import SKCore
 
 #if canImport(UIKit)
 import UIKit
@@ -36,5 +37,42 @@ func anyImage() -> PlatformImage {
 func testDirectory() -> URL {
     FileManager.default.temporaryDirectory
         .appendingPathComponent("SKStorageTests-\(UUID().uuidString)")
+}
+
+// MARK: - Spy Logger
+
+/// A test spy logger that records all log entries for verification.
+///
+/// - Note: `@unchecked Sendable` is safe here because this type is only used
+///   in test suites where access is serialized by the test runner.
+final class SpyLogger: LoggerProtocol, @unchecked Sendable {
+    let minimumLevel: LogLevel
+
+    struct Entry {
+        let message: String
+        let level: LogLevel
+    }
+
+    private(set) var entries: [Entry] = []
+
+    init(minimumLevel: LogLevel = .debug) {
+        self.minimumLevel = minimumLevel
+    }
+
+    func log(
+        _ message: @autoclosure () -> String,
+        level: LogLevel,
+        file: String,
+        function: String,
+        line: Int
+    ) {
+        guard level >= minimumLevel else { return }
+        entries.append(Entry(message: message(), level: level))
+    }
+
+    /// Returns entries filtered by level.
+    func entries(at level: LogLevel) -> [Entry] {
+        entries.filter { $0.level == level }
+    }
 }
 

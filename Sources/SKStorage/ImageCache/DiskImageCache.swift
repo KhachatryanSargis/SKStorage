@@ -26,6 +26,7 @@ import AppKit
 /// - Persistent storage across app launches.
 /// - Automatic directory creation.
 /// - SHA-256–based filename generation.
+/// - Optional logging for diagnosing file system failures.
 ///
 /// ## Usage
 ///
@@ -40,6 +41,7 @@ public actor DiskImageCache: ImageCacheProtocol {
     private let directory: URL
     private let fileManager: FileManager
     private let compressionQuality: Double
+    private let logger: any LoggerProtocol
 
     // MARK: - Init
 
@@ -51,52 +53,84 @@ public actor DiskImageCache: ImageCacheProtocol {
     ///   - fileManager: The file manager to use. Defaults to `.default`.
     ///   - compressionQuality: JPEG compression quality (0.0–1.0). Defaults to `0.8`.
     ///     Only used on iOS; macOS uses TIFF representation.
+    ///   - logger: Logger for reporting file system errors. Defaults to `OSLogLogger`.
     public init(
         directory: URL? = nil,
         fileManager: FileManager = .default,
-        compressionQuality: Double = 0.8
+        compressionQuality: Double = 0.8,
+        logger: any LoggerProtocol = OSLogLogger(subsystem: "SKStorage", category: "DiskImageCache")
     ) {
         self.fileManager = fileManager
         self.compressionQuality = compressionQuality
+        self.logger = logger
 
         let cacheDir = fileManager
             .urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SKImageCache")
         self.directory = directory ?? cacheDir
 
-        try? fileManager.createDirectory(
-            at: self.directory,
-            withIntermediateDirectories: true
-        )
+        do {
+            try fileManager.createDirectory(
+                at: self.directory,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            logger.warning("Failed to create cache directory at \(self.directory.path): \(error)")
+        }
     }
 
     // MARK: - ImageCacheProtocol
 
     public func image(for url: URL) -> PlatformImage? {
         let path = filePath(for: url)
-        guard let data = try? Data(contentsOf: path) else { return nil }
+        let data: Data
+        do {
+            data = try Data(contentsOf: path)
+        } catch {
+            // Cache miss is expected — only log at debug to avoid noise.
+            logger.debug("Cache miss for \(url.lastPathComponent): \(error)")
+            return nil
+        }
         return PlatformImage(data: data)
     }
 
     public func store(_ image: PlatformImage, for url: URL) {
         let path = filePath(for: url)
         guard let data = imageData(from: image) else { return }
-        try? data.write(to: path)
+        do {
+            try data.write(to: path)
+        } catch {
+            logger.warning("Failed to write image to disk at \(path.lastPathComponent): \(error)")
+        }
     }
 
     public func remove(for url: URL) {
         let path = filePath(for: url)
-        try? fileManager.removeItem(at: path)
+        do {
+            try fileManager.removeItem(at: path)
+        } catch {
+            logger.warning("Failed to remove cached image at \(path.lastPathComponent): \(error)")
+        }
     }
 
     public func clear() {
-        guard let files = try? fileManager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        ) else { return }
+        let files: [URL]
+        do {
+            files = try fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil
+            )
+        } catch {
+            logger.warning("Failed to list cache directory: \(error)")
+            return
+        }
 
         for file in files {
-            try? fileManager.removeItem(at: file)
+            do {
+                try fileManager.removeItem(at: file)
+            } catch {
+                logger.warning("Failed to remove \(file.lastPathComponent) during clear: \(error)")
+            }
         }
     }
 
